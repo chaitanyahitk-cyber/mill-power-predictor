@@ -2,3 +2,4 @@ streamlit
 pandas
 numpy
 XlsxWriter
+extra-streamlit-components

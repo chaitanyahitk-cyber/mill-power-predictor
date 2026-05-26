@@ -2,55 +2,89 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import re
+import datetime
+import time  # NEW: Required to sync Python with the browser
 from io import BytesIO
-
+import extra_streamlit_components as stx
 
 st.set_page_config(page_title="Mill Power Predictor", layout="wide")
 
-# --- PASSWORD LOCK ---
-def check_password():
-    if "password_correct" not in st.session_state:
-        st.session_state["password_correct"] = False
+# --- INITIALIZE COOKIE MANAGER ---
+cookie_manager = stx.CookieManager()
 
-    if not st.session_state["password_correct"]:
-        # Centering the login box
+# --- ACCOUNT & LOGIN SYSTEM (WITH COOKIES) ---
+def login_system():
+    # 1. THE "TAB RELOAD" SYNC FIX
+    # Force a split-second pause on the very first load to let the browser send cookies to Python
+    if "cookies_synced" not in st.session_state:
+        st.session_state["cookies_synced"] = True
+        time.sleep(0.5) 
+        st.rerun()
+
+    # 2. Check for the valid cookie
+    auth_cookie = cookie_manager.get(cookie="tega_auth_user")
+    
+    if auth_cookie:
+        st.session_state["logged_in"] = True
+        st.session_state["username"] = auth_cookie
+        return True
+
+    # 3. Setup Session State fallback
+    if "logged_in" not in st.session_state:
+        st.session_state["logged_in"] = False
+        st.session_state["username"] = ""
+
+    # 4. Display Login Form
+    if not st.session_state["logged_in"]:
+        st.markdown("<br><br>", unsafe_allow_html=True) 
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            st.title("🔒 Restricted Access")
-            st.write("Please enter the password to access the Industrial Mill Predictor.")
-            pwd = st.text_input("Password", type="password")
-            if st.button("Unlock"):
-                if pwd == "tegapower1258": # SET YOUR PASSWORD HERE
-                    st.session_state["password_correct"] = True
-                    st.rerun()
-                else:
-                    st.error("Incorrect Password")
+            st.title("🔒 Gateway Access")
+            st.write("Please log in to access the Industrial Mill Predictor.")
+            
+            with st.form("login_form"):
+                username = st.text_input("Username")
+                password = st.text_input("Password", type="password")
+                submit = st.form_submit_button("Login", use_container_width=True)
+                
+                if submit:
+                    if username.strip() == "":
+                        st.error("Please enter a username.")
+                    elif password == "tegapower1258": 
+                        formatted_name = username.strip().capitalize()
+                        
+                        # Set cookie valid for 30 days
+                        cookie_manager.set(
+                            "tega_auth_user", 
+                            formatted_name, 
+                            expires_at=datetime.datetime.now() + datetime.timedelta(days=30)
+                        )
+                        st.session_state["logged_in"] = True
+                        st.session_state["username"] = formatted_name
+                        
+                        # CRITICAL FIX: Wait for browser to save the cookie before restarting
+                        time.sleep(0.5) 
+                        st.rerun() 
+                    else:
+                        st.error("Incorrect Password.")
         return False
     return True
 
-# Trigger the check immediately
-if not check_password():
-    st.stop() # This halts the app until the password is correct
+if not login_system():
+    st.stop()
 
 
 # --- CUSTOM UI COMPRESSION & PROFESSIONAL STYLING (CSS) ---
 st.markdown("""
     <style>
-        /* 1. Aggressively reduce top/bottom padding */
+        .stApp > header { background-color: transparent !important; }
         .block-container {
-            padding-top: 1.5rem !important;
-            padding-bottom: 0rem !important; 
-            max-width: 95% !important; 
+            padding-top: 3rem !important; 
+            padding-bottom: 1rem !important; 
+            padding-left: 1rem !important;
+            padding-right: 1rem !important;
+            max-width: 100% !important; 
         }
-        
-        /* 2. COMPLETELY REMOVE Streamlit header and footer */
-        header { display: none !important; }
-        footer { display: none !important; }
-        
-        /* 3. Moderate "Zoom Out" */
-        html { zoom: 0.9; }
-        
-        /* 4. Professional Typography & Colors */
         h1 {
             color: #0E1117 !important;
             font-weight: 800 !important;
@@ -58,80 +92,56 @@ st.markdown("""
             padding-bottom: 0.5rem !important;
             border-bottom: 3px solid #1f77b4;
             margin-bottom: 1rem !important;
-            margin-top: -0.5rem !important; 
+            margin-top: 0rem !important; 
         }
-        
-        h2 {
-            padding-top: 0rem !important;
-            padding-bottom: 0.2rem !important;
-            margin-bottom: 0.5rem !important;
-            font-size: 1.5rem !important;
-        }
-        
-        /* Premium Dashboard Metric Cards */
-        [data-testid="stMetric"] {
+        .custom-metric-card {
             border: 1px solid #e0e6ed;
             border-radius: 8px;
-            padding: 10px 15px;
+            padding: 12px;
             background-color: #ffffff;
             border-left: 5px solid #1f77b4;
             box-shadow: 0 2px 4px rgba(0,0,0,0.04);
-            transition: all 0.2s ease-in-out;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
         }
-        [data-testid="stMetric"]:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 12px rgba(0,0,0,0.1);
+        .custom-metric-label {
+            font-size: 0.85rem;
+            color: #555555;
+            font-weight: 500;
+            margin-bottom: 4px;
         }
-        
-        /* Custom Primary Button */
+        .custom-metric-value {
+            font-size: 1.3rem;
+            font-weight: 800;
+            color: #000000;
+            word-break: break-word !important; 
+            white-space: normal !important;
+            line-height: 1.2;
+        }
         .stButton>button {
-            background-color: #1f77b4;
-            color: white;
-            border-radius: 6px;
-            font-weight: 600;
-            border: none;
-            padding: 0.6rem 1.2rem;
-            transition: all 0.3s;
+            background-color: #1f77b4; color: white; border-radius: 6px; font-weight: 600; border: none; padding: 0.6rem 1.2rem; transition: all 0.3s;
         }
         .stButton>button:hover {
-            background-color: #155a8a;
-            color: white;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+            background-color: #155a8a; color: white; box-shadow: 0 4px 8px rgba(0,0,0,0.15);
         }
-        
-        /* 5. Clean gap between stacked UI elements */
-        [data-testid="stVerticalBlock"] {
-            gap: 0.3rem !important;
-        }
-        
-        /* 6. Uploader Spacing and Sleek Expander */
+        [data-testid="stVerticalBlock"] { gap: 0.4rem !important; }
         [data-testid="stExpander"] {
-            margin-bottom: 0rem !important; 
-            border: 1px solid #e0e6ed !important;
-            border-radius: 8px !important;
-            background-color: #fafbfc;
+            margin-bottom: 0rem !important; border: 1px solid #e0e6ed !important; border-radius: 8px !important; background-color: #fafbfc;
         }
-        
-        /* Compress the File Uploader Box visually */
-        [data-testid="stFileUploader"] {
-            margin-top: 0rem !important;
+        @media (max-width: 767px) {
+            [data-testid="collapsedControl"] {
+                display: flex !important; position: fixed !important; top: 0.5rem !important; left: 0.5rem !important; z-index: 999999 !important; background-color: #ffffff; border: 1px solid #e0e6ed; border-radius: 4px; padding: 4px;
+            }
         }
-        [data-testid="stFileUploader"] section {
-            padding: 1rem !important;
-            min-height: 80px !important;
-        }
-        
-        /* Dark mode text compatibility */
         @media (prefers-color-scheme: dark) {
             h1, h2 { color: #FAFAFA !important; }
-            [data-testid="stMetric"] {
-                background-color: #262730;
-                border: 1px solid rgba(250, 250, 250, 0.1);
-            }
-            [data-testid="stExpander"] {
-                background-color: #1e1e24;
-                border: 1px solid #333 !important;
-            }
+            .custom-metric-card { background-color: #262730; border: 1px solid rgba(250, 250, 250, 0.1); border-left: 5px solid #1f77b4; }
+            .custom-metric-label { color: #aaaaaa; }
+            .custom-metric-value { color: #ffffff; }
+            [data-testid="stExpander"] { background-color: #1e1e24; border: 1px solid #333 !important; }
+            [data-testid="collapsedControl"] { background-color: #262730; border: 1px solid #555; }
         }
     </style>
 """, unsafe_allow_html=True)
@@ -177,20 +187,31 @@ def standardize_columns(dataframe):
     return dataframe.rename(columns=mapping)
 
 # --- UI & CONFIGURATION ---
-mode = st.sidebar.radio("Mode:", ["Manual Input", "Excel Batch Upload"])
-mill_type = st.sidebar.radio("Mill Type:", ["Ball Mill", "SAG Mill"])
-
-st.sidebar.divider()
-st.sidebar.markdown("### Output Parameters")
-st.sidebar.caption("Select parameters to calculate:")
-
-# Permanent individual checkboxes for UI clarity
-out_p_mech = st.sidebar.checkbox("Predicted Power (kW)", value=True)
-out_p_bond = st.sidebar.checkbox("Bond Power (kW)", value=True)
-out_se = st.sidebar.checkbox("Sp. Energy (kWh/t)", value=True)
-out_eff = st.sidebar.checkbox("Efficiency (%)", value=True)
-out_max_tph = st.sidebar.checkbox("Max TPH (t/h)", value=True)
-out_rem = st.sidebar.checkbox("Remarks", value=True)
+with st.sidebar:
+    # User Greeting & Logout
+    st.success(f"👋 Welcome, {st.session_state['username']}!")
+    if st.button("Log Out", use_container_width=True):
+        cookie_manager.delete("tega_auth_user") 
+        time.sleep(0.5) # CRITICAL FIX: Let browser delete the cookie before wiping session
+        st.session_state.clear() 
+        st.rerun()
+    
+    st.divider()
+    
+    mode = st.radio("Mode:", ["Manual Input", "Excel Batch Upload"])
+    mill_type = st.radio("Mill Type:", ["Ball Mill", "SAG Mill"])
+    
+    st.divider()
+    st.markdown("### Output Parameters")
+    st.caption("Select parameters to calculate:")
+    
+    with st.expander("Toggle Outputs", expanded=True):
+        out_p_mech = st.checkbox("Predicted Power (kW)", value=True)
+        out_p_bond = st.checkbox("Bond Power (kW)", value=True)
+        out_se = st.checkbox("Sp. Energy (kWh/t)", value=True)
+        out_eff = st.checkbox("Efficiency (%)", value=True)
+        out_max_tph = st.checkbox("Max TPH (t/h)", value=True)
+        out_rem = st.checkbox("Remarks", value=True)
 
 selected_outputs = []
 if out_p_mech: selected_outputs.append("Predicted Power (kW)")
@@ -231,7 +252,6 @@ def process_analytics(df, mill_type):
             p_mech, p_bond, se, max_tph = 0, 0, 0, 0
             eff, rem = "N/A", "N/A"
 
-            # 1. Mechanical Power Calculations
             if needs_mech:
                 deff, leff, n, j, wl = float(r['DEFF(m)']), float(r['LEFF(m)']), float(r['N (RPM)']), float(r['J %']), float(r['WL (tons)'])
                 if mill_type == "Ball Mill":
@@ -241,7 +261,6 @@ def process_analytics(df, mill_type):
                     p_mech = calculate_sag_mech_power(deff, leff, n, j, jb, tph, f80, p80, wl)
                 se = p_mech / tph if tph > 0 else 0
 
-            # 2. Bond Power Calculations
             if needs_bond:
                 bwi = float(r['BWI'])
                 if mill_type == "Ball Mill":
@@ -249,7 +268,6 @@ def process_analytics(df, mill_type):
                 else:
                     p_bond = calculate_sag_grind_power(bwi, tph, f80, p80)
 
-            # 3. Interdependent Calculations (Efficiency & Remarks)
             if needs_mech and needs_bond:
                 if mill_type == "Ball Mill":
                     max_tph = max(0, (( (p_mech / (tph**0.065)) / (10 * bwi * ((1/np.sqrt(p80)) - (1/np.sqrt(f80)))) )**(1/0.935))) if tph > 0 and bwi > 0 else 0
@@ -274,7 +292,6 @@ def process_analytics(df, mill_type):
                         elif max_tph < tph - 0.1: rem = f"REDUCE TPH to {max_tph:.1f}"
                         else: rem = "OK"
 
-            # Assign to dynamic output dictionary
             if "Predicted Power (kW)" in selected_outputs: out["Predicted Power (kW)"] = p_mech
             if "Bond Power (kW)" in selected_outputs: out["Bond Power (kW)"] = p_bond
             if "Sp. Energy (kWh/t)" in selected_outputs: out["Sp. Energy (kWh/t)"] = se
@@ -304,12 +321,8 @@ if mode == "Manual Input":
     if out_p_mech:
         display_power_formula(mill_type)
 
-    # -------------------------------------------------------------------
-    # NEW DYNAMIC 4-COLUMN INPUT LAYOUT ENGINE (Saves 1 full row of space)
-    # -------------------------------------------------------------------
     active_inputs = []
     
-    # Collect only the required inputs based on sidebar selection
     if needs_mech:
         active_inputs.append(("deff", "DEFF: Effective dia of mill (m)", 8.0))
         active_inputs.append(("leff", "LEFF: Effective length of mill (m)", 12.0))
@@ -326,7 +339,6 @@ if mode == "Manual Input":
     if needs_bond:
         active_inputs.append(("bwi", "BWI: Bond Work Index (kWh/t)", 15.0))
 
-    # Dynamically distribute inputs across up to 4 columns to save vertical space
     input_data = {}
     num_cols = min(4, len(active_inputs))
     
@@ -335,11 +347,9 @@ if mode == "Manual Input":
         for i, (var_name, label, default_val) in enumerate(active_inputs):
             with cols[i % num_cols]:
                 input_data[var_name] = st.number_input(label, value=default_val, step=0.0001, format="%.4f")
-    # -------------------------------------------------------------------
     
     st.divider()
     
-    # Map collected dynamic inputs back to dataframe structure
     input_df_dict = {
         'TPH': input_data.get('tph', 1000.0), 
         'F80': input_data.get('f80', 10000.0), 
@@ -366,19 +376,27 @@ if mode == "Manual Input":
         m_cols = st.columns(len(metrics_to_show))
         for i, metric in enumerate(metrics_to_show):
             val = res_df.iloc[0][metric]
-            if metric == "Predicted Power (kW)" or metric == "Bond Power (kW)":
-                m_cols[i].metric(metric.split(" ")[0] + " Power", f"{val:,.0f} kW")
-            elif metric == "Sp. Energy (kWh/t)":
-                m_cols[i].metric("Sp. Energy", f"{val:.2f} kWh/t")
-            elif metric == "Max TPH (t/h)":
-                m_cols[i].metric("Max TPH", f"{val:.1f} t/h" if not pd.isna(val) else "N/A")
-            elif metric == "Efficiency (%)":
-                if pd.isna(val) or val == "N/A":
-                    m_cols[i].metric("Efficiency", "N/A")
-                elif "OVERLOADED" in res_df.iloc[0].get("Remarks", ""):
-                    m_cols[i].metric("Efficiency", val, "- OVERLOAD", delta_color="normal")
-                else:
-                    m_cols[i].metric("Efficiency", val)
+            
+            if "Power" in metric:
+                display_val = f"{val:,.0f} kW"
+                label = metric.replace(" (kW)", "")
+            elif "Sp. Energy" in metric:
+                display_val = f"{val:.2f} kWh/t"
+                label = "Sp. Energy"
+            elif "Max TPH" in metric:
+                display_val = f"{val:,.1f} t/h" if not pd.isna(val) else "N/A"
+                label = "Max TPH"
+            else:
+                display_val = str(val) if not pd.isna(val) else "N/A"
+                label = metric.split(" ")[0]
+
+            html_card = f"""
+            <div class="custom-metric-card">
+                <div class="custom-metric-label">{label}</div>
+                <div class="custom-metric-value">{display_val}</div>
+            </div>
+            """
+            m_cols[i].markdown(html_card, unsafe_allow_html=True)
     
     if "Remarks" in selected_outputs:
         rem = res_df.iloc[0]["Remarks"]
