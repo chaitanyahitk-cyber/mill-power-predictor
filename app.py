@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import re
 import datetime
-import time  # NEW: Required to sync Python with the browser
+import time  
 from io import BytesIO
 import extra_streamlit_components as stx
 
@@ -12,13 +12,12 @@ st.set_page_config(page_title="Mill Power Predictor", layout="wide")
 # --- INITIALIZE COOKIE MANAGER ---
 cookie_manager = stx.CookieManager()
 
-# --- ACCOUNT & LOGIN SYSTEM (WITH COOKIES) ---
+# --- ACCOUNT & LOGIN SYSTEM (WITH CLOUD SECURITY FIXES) ---
 def login_system():
-    # 1. THE "TAB RELOAD" SYNC FIX
-    # Force a split-second pause on the very first load to let the browser send cookies to Python
+    # 1. Cloud Latency Sync (1.2s pause for internet lag)
     if "cookies_synced" not in st.session_state:
         st.session_state["cookies_synced"] = True
-        time.sleep(0.5) 
+        time.sleep(1.2) 
         st.rerun()
 
     # 2. Check for the valid cookie
@@ -53,23 +52,26 @@ def login_system():
                     elif password == "tegapower1258": 
                         formatted_name = username.strip().capitalize()
                         
-                        # Set cookie valid for 30 days
+                        # Set secure cloud cookie valid for 30 days
                         cookie_manager.set(
-                            "tega_auth_user", 
-                            formatted_name, 
-                            expires_at=datetime.datetime.now() + datetime.timedelta(days=30)
+                            cookie="tega_auth_user", 
+                            val=formatted_name, 
+                            expires_at=datetime.datetime.now() + datetime.timedelta(days=30),
+                            secure=True,          
+                            same_site="none"      
                         )
                         st.session_state["logged_in"] = True
                         st.session_state["username"] = formatted_name
                         
-                        # CRITICAL FIX: Wait for browser to save the cookie before restarting
-                        time.sleep(0.5) 
+                        # Wait 1.2s for cloud network to physically save the cookie
+                        time.sleep(1.2) 
                         st.rerun() 
                     else:
                         st.error("Incorrect Password.")
         return False
     return True
 
+# Stop the app from rendering anything else if they aren't logged in
 if not login_system():
     st.stop()
 
@@ -192,7 +194,7 @@ with st.sidebar:
     st.success(f"👋 Welcome, {st.session_state['username']}!")
     if st.button("Log Out", use_container_width=True):
         cookie_manager.delete("tega_auth_user") 
-        time.sleep(0.5) # CRITICAL FIX: Let browser delete the cookie before wiping session
+        time.sleep(1.2) # Let cloud browser physically delete the cookie
         st.session_state.clear() 
         st.rerun()
     
