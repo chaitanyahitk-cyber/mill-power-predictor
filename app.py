@@ -153,13 +153,13 @@ st.title("Industrial Mill Power Predictor")
 # --- NATIVE FORMULA RENDERER ---
 def display_power_formula(mill_type):
     if mill_type == "Ball Mill":
-        st.info(r"**Applied Power Model**" + "\n\n" + r"$$P_{ball} = 0.0607 \cdot D_{eff}^{2.434} \cdot L_{eff}^{1.0631} \cdot N^{0.869} \cdot J^{0.5457} \cdot TPH^{0.065} \cdot F_{80}^{0.0224} \cdot P_{80}^{-0.0589} \cdot W_L^{0.08}$$", icon="⚙️")
+        st.info(r"**Applied Power Model**" + "\n\n" + r"$$P_{ball} = 0.023182 \cdot D_{eff}^{2.3891} \cdot L_{eff}^{1.1} \cdot N^{0.8813} \cdot J^{0.5044} \cdot J_b^{0.2954} \cdot TPH^{0.0882} \cdot F_{80}^{0.01} \cdot P_{80}^{-0.0725} \cdot W_L^{0.08}$$", icon="⚙️")
     else:
         st.info(r"**Applied Power Model**" + "\n\n" + r"$$P_{sag} = 0.0523 \cdot D_{eff}^{2.5996} \cdot L_{eff}^{0.9018} \cdot N^{0.8002} \cdot J^{0.3222} \cdot J_b^{0.3530} \cdot TPH^{0.029} \cdot F_{80}^{0.01} \cdot P_{80}^{-0.0104} \cdot W_L^{0.10}$$", icon="⚙️")
 
 # --- CORE MATH ---
-def calculate_ball_power(deff, leff, n, j, tph, f80, p80, wl):
-    return 0.0607 * (deff**2.434) * (leff**1.0631) * (n**0.869) * (j**0.5457) * (tph**0.065) * (f80**0.0224) * (p80**-0.0589) * (wl**0.08)
+def calculate_ball_power(deff, leff, n, j, jb, tph, f80, p80, wl):
+    return 0.023182 * (deff**2.3891) * (leff**1.1) * (n**0.8813) * (j**0.5044) * (jb**0.2954) * (tph**0.0882) * (f80**0.01) * (p80**-0.0725) * (wl**0.08)
 
 def calculate_sag_mech_power(deff, leff, n, j, jb, tph, f80, p80, wl):
     return 0.0523 * (deff**2.5996) * (leff**0.9018) * (n**0.8002) * (j**0.3222) * (jb**0.3530) * (tph**0.029) * (f80**0.01) * (p80**-0.0104) * (wl**0.10)
@@ -233,8 +233,7 @@ needs_bond = any(o in selected_outputs for o in ["Bond Power (kW)", "Efficiency 
 
 required_cols = ['TPH', 'F80', 'P80']
 if needs_mech:
-    required_cols.extend(['DEFF(m)', 'LEFF(m)', 'N (RPM)', 'J %', 'WL (tons)'])
-    if mill_type == "SAG Mill": required_cols.append('Jb %')
+    required_cols.extend(['DEFF(m)', 'LEFF(m)', 'N (RPM)', 'J %', 'Jb %', 'WL (tons)'])
 if needs_bond:
     required_cols.append('BWI')
 
@@ -255,11 +254,10 @@ def process_analytics(df, mill_type):
             eff, rem = "N/A", "N/A"
 
             if needs_mech:
-                deff, leff, n, j, wl = float(r['DEFF(m)']), float(r['LEFF(m)']), float(r['N (RPM)']), float(r['J %']), float(r['WL (tons)'])
+                deff, leff, n, j, jb, wl = float(r['DEFF(m)']), float(r['LEFF(m)']), float(r['N (RPM)']), float(r['J %']), float(r['Jb %']), float(r['WL (tons)'])
                 if mill_type == "Ball Mill":
-                    p_mech = calculate_ball_power(deff, leff, n, j, tph, f80, p80, wl)
+                    p_mech = calculate_ball_power(deff, leff, n, j, jb, tph, f80, p80, wl)
                 else:
-                    jb = float(r['Jb %'])
                     p_mech = calculate_sag_mech_power(deff, leff, n, j, jb, tph, f80, p80, wl)
                 se = p_mech / tph if tph > 0 else 0
 
@@ -272,7 +270,7 @@ def process_analytics(df, mill_type):
 
             if needs_mech and needs_bond:
                 if mill_type == "Ball Mill":
-                    max_tph = max(0, (( (p_mech / (tph**0.065)) / (10 * bwi * ((1/np.sqrt(p80)) - (1/np.sqrt(f80)))) )**(1/0.935))) if tph > 0 and bwi > 0 else 0
+                    max_tph = max(0, (( (p_mech / (tph**0.0882)) / (10 * bwi * ((1/np.sqrt(p80)) - (1/np.sqrt(f80)))) )**(1/0.9118))) if tph > 0 and bwi > 0 else 0
                     eff_ratio = p_bond / p_mech if p_mech > 0 else 0
                     if eff_ratio > 1.0:
                         eff = f"{eff_ratio * 100:.1f}%"
@@ -331,8 +329,7 @@ if mode == "Manual Input":
         active_inputs.append(("wl", "WL: Weight of liners (tons)", 150.0))
         active_inputs.append(("n", "N: Mill rotational speed (RPM)", 13.5))
         active_inputs.append(("j", "J: Mill filling degree (%)", 30.0))
-        if mill_type == "SAG Mill":
-            active_inputs.append(("jb", "Jb: Ball charge filling (%)", 10.0))
+        active_inputs.append(("jb", "Jb: Ball charge filling (%)", 10.0))
             
     active_inputs.append(("tph", "TPH: Fresh feed throughput (t/h)", 1000.0))
     active_inputs.append(("f80", "F80: 80% passing size of feed (µm)", 10000.0))
@@ -363,10 +360,9 @@ if mode == "Manual Input":
             'LEFF(m)': input_data.get('leff', 12.0),
             'N (RPM)': input_data.get('n', 13.5),
             'J %': input_data.get('j', 30.0),
+            'Jb %': input_data.get('jb', 10.0),
             'WL (tons)': input_data.get('wl', 150.0)
         })
-        if mill_type == "SAG Mill": 
-            input_df_dict['Jb %'] = input_data.get('jb', 10.0)
     if needs_bond:
         input_df_dict['BWI'] = input_data.get('bwi', 15.0)
         
